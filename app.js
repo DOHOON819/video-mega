@@ -52,6 +52,7 @@ async function start(action) {
     if(!state.token)throw new Error('로컬 작업실에 연결해 주세요. 엔진 연결 화면에서 연결할 수 있어요.');
     const health=await refreshHealth();
     if(!health)throw new Error('로컬 작업실에 연결하지 못했습니다. 엔진 연결에서 다시 확인해 주세요.');
+    if(+$('clip-duration').value===4&&!health.capabilities?.clip_durations?.includes(4))throw new Error('현재 연결된 로컬 작업실은 4초 장면을 아직 지원하지 않습니다. 작업실 업데이트가 적용된 뒤 다시 시도하거나 다른 장면 길이를 선택해 주세요. 입력한 내용은 그대로 보관됩니다.');
     if(!health.ollama.ready)throw new Error('장면 구성을 위해 Ollama를 실행해 주세요.');
     if(action==='auto'&&!health.comfy.ready)throw new Error(health.comfy.model_ready?'새 영상 AI의 실제 결과를 검증하고 있습니다. 검증이 끝나면 생성할 수 있어요.':health.comfy.running?'영상 엔진의 모델 준비가 끝나지 않았습니다. 엔진 연결에서 준비 상태를 확인해 주세요.':'영상 엔진이 꺼져 있습니다. Video Mega 시작 프로그램을 실행한 뒤 다시 눌러 주세요.');
     const job=await api('/api/jobs',brief(action)); state.dirty.clear();state.shown=12;setJob(job);$('storyboard').scrollIntoView({behavior:'smooth',block:'start'});poll();loadProjects();
@@ -188,6 +189,7 @@ async function refreshHealth(){
   $('refresh-health').disabled=true;
   try{
     const h=await api('/api/health');state.health=h;const ready=h.ollama.ready&&h.comfy.ready;
+    $('clip-duration-four').hidden=$('clip-duration-four').disabled=!h.capabilities?.clip_durations?.includes(4);
     $('engine-preview').hidden=!h.comfy.preview;
     $('connection-pill').textContent=ready?'● 로컬 엔진 준비 완료':'● 로컬 작업실 연결됨';$('connection-pill').classList.add('connected');
     $('engine-note').textContent=ready?'Ollama와 영상 엔진이 연결됐어요. 먼저 15초 영상으로 시작해 보세요.':h.ollama.ready?'Ollama 연결 완료. 영상 엔진은 준비 중이며, 장면 구성부터 시작할 수 있어요.':'장면 구성을 위해 Ollama를 실행해 주세요.';
@@ -290,7 +292,7 @@ function readDraft(raw){
   if(!draft||typeof draft.topic!=='string'||typeof draft.description!=='string')return null;
   return {topic:draft.topic.slice(0,160),description:draft.description.slice(0,4000),
     duration:[15,60,600,1800,3600].includes(+draft.duration)?+draft.duration:15,
-    clip_duration:[3,5,6,8].includes(+draft.clip_duration)?+draft.clip_duration:3,
+    clip_duration:[3,4,5,6,8].includes(+draft.clip_duration)?+draft.clip_duration:3,
     style:['cinematic','nature','animation'].includes(draft.style)?draft.style:'cinematic',
     reference_id:/^[a-f0-9]{64}$/.test(draft.reference_id||'')?draft.reference_id:'',reference_name:String(draft.reference_name||'').slice(0,40)};
 }
