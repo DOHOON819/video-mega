@@ -21,7 +21,7 @@ function showView(id) {
   if(id==='settings') refreshHealth();
 }
 function counts() { const total=+$('duration').value,clip=+$('clip-duration').value; $('scene-count').textContent=`${Math.ceil((total-6)/clip).toLocaleString()}개 장면 + 인트로`; $('total-label').textContent=`총 ${timecode(total)}`; }
-function brief(action) { return {topic:$('topic').value,description:$('description').value,duration:+$('duration').value,clip_duration:+$('clip-duration').value,style:state.style,model:$('model').value,reference_id:state.referenceId,action}; }
+function brief(action) { return {topic:$('topic').value,description:$('description').value,duration:+$('duration').value,clip_duration:+$('clip-duration').value,style:state.style,model:$('model').value,reference_id:state.referenceId,reference_name:$('reference-name').value.trim(),action}; }
 function setReference(referenceId,preview=''){
   state.referenceId=referenceId||'';
   const image=$('reference-preview');
@@ -88,7 +88,7 @@ function setJob(job) {
     const outline=job.outline?.length||0;
     $('job-status').textContent=outline<chapters?'1단계 · 이야기 구간 구성 중':'2단계 · 영상 장면 구성 중';
     $('job-detail').textContent=`이야기 구간 ${outline} / ${chapters}개 · 영상 장면 ${(job.scenes?.length||0).toLocaleString()} / ${job.total_scenes.toLocaleString()}개 · 최종 영상 장면 수는 그대로입니다.`;
-    if(job.planner){$('job-status').textContent=job.phase;$('job-detail').textContent+=`\n${job.planner.chars?`AI 응답 ${job.planner.chars.toLocaleString()}자 수신 중`:'AI 첫 응답 대기 중'} · ${job.detail||''}`;}
+    if(job.planner){$('job-status').textContent=job.phase;$('job-detail').textContent+=`\n${job.planner.state==='thinking'?'AI가 이야기 흐름을 검토 중':job.planner.chars?`AI 응답 ${job.planner.chars.toLocaleString()}자 수신 중`:'AI 첫 응답 대기 중'} · ${job.detail||''}`;}
   }
   $('job-detail').classList.toggle('error-text',job.status==='error');
   if(job.status==='planning'){
@@ -191,6 +191,7 @@ async function refreshHealth(){
     $('engine-preview').hidden=!h.comfy.preview;
     $('connection-pill').textContent=ready?'● 로컬 엔진 준비 완료':'● 로컬 작업실 연결됨';$('connection-pill').classList.add('connected');
     $('engine-note').textContent=ready?'Ollama와 영상 엔진이 연결됐어요. 먼저 15초 영상으로 시작해 보세요.':h.ollama.ready?'Ollama 연결 완료. 영상 엔진은 준비 중이며, 장면 구성부터 시작할 수 있어요.':'장면 구성을 위해 Ollama를 실행해 주세요.';
+    $('reference-name-field').hidden=!h.capabilities?.reference_speaker_names;
     const rows=[['Ollama · 장면 구성',h.ollama.ready?'연결됨':'실행 필요',h.ollama.ready],[h.comfy.name||'영상과 소리 AI',h.comfy.ready?'준비 완료':h.comfy.model_ready?'실제 영상 검증 중':h.comfy.running?'모델·노드 준비 중':'실행 필요',h.comfy.ready],['FFmpeg · 이어 붙이기',h.ffmpeg.ready?'준비 완료':'설치 필요',h.ffmpeg.ready],['저장 공간',`${h.storage_free_gb.toLocaleString()} GB 여유`,h.storage_free_gb>10]];
     const characterEngine=document.querySelector?.('#character-card small');if(characterEngine)characterEngine.textContent=`IDENTITY LOCK · ${h.comfy.name||'영상 AI'} · NATIVE AUDIO`;
     const facts=document.querySelector?.('.facts p');if(facts)facts.textContent=`Video Mega는 장면 구성에 Ollama, 영상과 소리 생성에 ${h.comfy.name||'로컬 영상 AI'}를 사용합니다. 크레딧이나 생성 횟수 제한 없이 계속 만들 수 있으며 PC·저장 공간·전력만 사용합니다. 별도의 유료 API로 자동 전환하지 않습니다.`;
@@ -234,7 +235,7 @@ $('avatar').addEventListener('click',()=>showView('settings'));
 $('brief-form').addEventListener('submit',e=>{e.preventDefault();start('auto');});$('plan-button').addEventListener('click',()=>start('plan'));
 $('description').addEventListener('input',()=>{$('char-count').textContent=`${$('description').value.length.toLocaleString()} / 4,000`;saveDraft();});
 function saveDraft(){localStorage.setItem('fw-draft',JSON.stringify(brief('plan')));}
-for(const id of ['topic','duration','clip-duration'])$(id).addEventListener('change',()=>{counts();saveDraft();});
+for(const id of ['topic','duration','clip-duration','reference-name'])$(id).addEventListener('change',()=>{counts();saveDraft();});
 document.querySelectorAll('[data-style]').forEach(n=>n.addEventListener('click',()=>{state.style=n.dataset.style;document.querySelectorAll('[data-style]').forEach(b=>b.classList.toggle('selected',b===n));saveDraft();}));
 $('example').addEventListener('click',()=>{$('topic').value='빗소리와 함께 걷는 새벽의 숲';$('description').value='이슬이 맺힌 나뭇잎에서 시작해, 작은 개울을 지나 안개 낀 숲길로 걸어갑니다. 부드러운 아침빛과 차분한 초록색. 빗방울, 새소리, 흐르는 물소리가 장면에 맞게 들리는 힐링 영상.';$('duration').value='15';$('description').dispatchEvent(new Event('input'));counts();saveDraft();toast('15초 테스트 예시를 준비했어요. 장면 구성하기를 눌러 시작하세요.');});
 $('more-scenes').addEventListener('click',()=>{state.shown+=24;renderScenes();});$('export-plan').addEventListener('click',downloadJSON);$('render-button').addEventListener('click',render);
@@ -262,7 +263,7 @@ async function init(){
     try{const draft=readDraft(decodeURIComponent(location.hash.slice(7)));if(draft)localStorage.setItem('fw-draft',JSON.stringify(draft));}catch{}
     history.replaceState(null,'',location.pathname+location.search);
   }
-  try{const draft=JSON.parse(localStorage.getItem('fw-draft')||'null');if(draft){$('topic').value=draft.topic||'';$('description').value=draft.description||'';$('duration').value=String(draft.duration);$('clip-duration').value=String(draft.clip_duration);state.style=draft.style||'cinematic';state.referenceId=/^[a-f0-9]{64}$/.test(draft.reference_id||'')?draft.reference_id:'';document.querySelectorAll('[data-style]').forEach(n=>n.classList.toggle('selected',n.dataset.style===state.style));$('char-count').textContent=`${$('description').value.length.toLocaleString()} / 4,000`;}}catch{}
+  try{const draft=JSON.parse(localStorage.getItem('fw-draft')||'null');if(draft){$('topic').value=draft.topic||'';$('description').value=draft.description||'';$('duration').value=String(draft.duration);$('clip-duration').value=String(draft.clip_duration);state.style=draft.style||'cinematic';state.referenceId=/^[a-f0-9]{64}$/.test(draft.reference_id||'')?draft.reference_id:'';$('reference-name').value=String(draft.reference_name||'').slice(0,40);document.querySelectorAll('[data-style]').forEach(n=>n.classList.toggle('selected',n.dataset.style===state.style));$('char-count').textContent=`${$('description').value.length.toLocaleString()} / 4,000`;}}catch{}
   counts();$('server-url').value=state.base;
   if(local){try{const session=await fetch('/api/session').then(r=>r.json());state.token=session.token;localStorage.setItem('fw-token',state.token);$('local-code').hidden=false;$('local-code').textContent='웹 작업실 연결 코드: '+state.token;}catch{}}
   if(state.referenceId)setReference(state.referenceId);
@@ -279,6 +280,7 @@ function fillBrief(value){
   $('topic').value=value.topic;$('description').value=value.description;
   $('duration').value=String(value.duration);$('clip-duration').value=String(value.clip_duration);
   state.style=value.style||'cinematic';
+  $('reference-name').value=value.reference_name||'';
   setReference(value.reference_id||'');
   document.querySelectorAll('[data-style]').forEach(n=>n.classList.toggle('selected',n.dataset.style===state.style));
   $('char-count').textContent=`${value.description.length.toLocaleString()} / 4,000`;counts();saveDraft();
@@ -290,6 +292,6 @@ function readDraft(raw){
     duration:[15,60,600,1800,3600].includes(+draft.duration)?+draft.duration:15,
     clip_duration:[3,5,6,8].includes(+draft.clip_duration)?+draft.clip_duration:3,
     style:['cinematic','nature','animation'].includes(draft.style)?draft.style:'cinematic',
-    reference_id:/^[a-f0-9]{64}$/.test(draft.reference_id||'')?draft.reference_id:''};
+    reference_id:/^[a-f0-9]{64}$/.test(draft.reference_id||'')?draft.reference_id:'',reference_name:String(draft.reference_name||'').slice(0,40)};
 }
 const initialized=init();
